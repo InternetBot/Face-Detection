@@ -1,0 +1,99 @@
+import os
+import librosa
+import numpy as np
+import pandas as pd
+
+# Function to verify audio files in a directory
+def verify_audio_files(directory):
+    valid_files = []
+    for filename in os.listdir(directory):
+        if filename.endswith('.wav') or filename.endswith('.mp3'):
+            file_path = os.path.join(directory, filename)
+            try:
+                # Attempt to load the audio file
+                y, sr = librosa.load(file_path, sr=None)
+                print(f"Successfully loaded: {filename} (Sample Rate: {sr}, Length: {len(y)} samples)")
+                valid_files.append(file_path)  # Store valid file paths
+            except Exception as e:
+                print(f"Error loading {filename}: {e}")
+    return valid_files  # Return list of valid file paths
+
+# Function to load audio files and extract features
+def load_and_process_audio_files(valid_files):
+    audio_features = {}
+    
+    for file_path in valid_files:
+        filename = os.path.basename(file_path)  # Get the file name from path
+        try:
+            # Load audio file
+            y, sr = librosa.load(file_path, sr=None)
+            
+            # Extract MFCCs
+            mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+            mfccs_mean = np.mean(mfccs, axis=1)  # Mean of MFCCs across time
+            
+            # Extract Spectrogram
+            spectrogram = librosa.feature.melspectrogram(y=y, sr=sr)
+            spectrogram_db = librosa.power_to_db(spectrogram, ref=np.max)  # Convert to dB
+            
+            # Store features in a dictionary
+            audio_features[filename] = {
+                'sample_rate': sr,
+                'mfccs': mfccs_mean,
+                'spectrogram': spectrogram_db
+            }
+            
+            print(f"Processed: {filename} (Sample Rate: {sr})")
+        except Exception as e:
+            print(f"Error processing {filename}: {e}")
+    
+    return audio_features
+
+# Function to organize audio data for model training
+def organize_audio_data(real_audio_features, deepfake_audio_features):
+    data = []
+    labels = []
+
+    # Organize real audio data
+    for filename, features in real_audio_features.items():
+        data.append(features['mfccs'])  # Use MFCCs as features
+        labels.append(0)  # Label '0' for real audio
+
+    # Organize deepfake audio data
+    for filename, features in deepfake_audio_features.items():
+        data.append(features['mfccs'])  # Use MFCCs as features
+        labels.append(1)  # Label '1' for deepfake audio
+
+    # Convert to DataFrame for easy handling
+    df = pd.DataFrame(data)
+    df['label'] = labels  # Add labels to the DataFrame
+
+    return df
+
+# Path to your real and deepfake audio directories
+real_audio_dir = r'C:\Users\xavie\OneDrive\Desktop\RealVoices'
+deepfake_audio_dir = r'C:\Users\xavie\OneDrive\Desktop\FakeVoices'
+
+# Verify real audio files
+print("Verifying real audio files:")
+valid_real_audio_files = verify_audio_files(real_audio_dir)
+
+# Load and process real audio files
+print("\nProcessing real audio files:")
+real_audio_features = load_and_process_audio_files(valid_real_audio_files)
+
+# Verify deepfake audio files
+print("\nVerifying deepfake audio files:")
+valid_deepfake_audio_files = verify_audio_files(deepfake_audio_dir)
+
+# Load and process deepfake audio files
+print("\nProcessing deepfake audio files:")
+deepfake_audio_features = load_and_process_audio_files(valid_deepfake_audio_files)
+
+# Organize audio data for model training
+print("\nOrganizing audio data for model training:")
+training_data = organize_audio_data(real_audio_features, deepfake_audio_features)
+
+# Optionally, save the organized data to a CSV file for later use
+training_data.to_csv('audio_training_data.csv', index=False)
+print("Training data organized and saved to audio_training_data.csv")
